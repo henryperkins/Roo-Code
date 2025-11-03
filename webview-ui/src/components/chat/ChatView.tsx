@@ -187,7 +187,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 	const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({})
 	const prevExpandedRowsRef = useRef<Record<number, boolean>>()
 	const scrollContainerRef = useRef<HTMLDivElement>(null)
-	const disableAutoScrollRef = useRef(false)
+	const stickyFollowRef = useRef<boolean>(false)
 	const [showScrollToBottom, setShowScrollToBottom] = useState(false)
 	const [isAtBottom, setIsAtBottom] = useState(false)
 	const lastTtsRef = useRef<string>("")
@@ -508,9 +508,11 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 			}
 		}
 
+		// Expanding a row indicates the user is browsing; disable sticky follow
 		if (wasAnyRowExpandedByUser) {
-			disableAutoScrollRef.current = true
+			stickyFollowRef.current = false
 		}
+
 		prevExpandedRowsRef.current = expandedRows // Store current state for next comparison
 	}, [expandedRows])
 
@@ -583,7 +585,6 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 		// Do not reset mode here as it should persist.
 		// setPrimaryButtonText(undefined)
 		// setSecondaryButtonText(undefined)
-		disableAutoScrollRef.current = false
 	}, [])
 
 	/**
@@ -1385,7 +1386,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 
 	const handleRowHeightChange = useCallback(
 		(isTaller: boolean) => {
-			if (!disableAutoScrollRef.current) {
+			if (isAtBottom) {
 				if (isTaller) {
 					scrollToBottomSmooth()
 				} else {
@@ -1393,33 +1394,17 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 				}
 			}
 		},
-		[scrollToBottomSmooth, scrollToBottomAuto],
+		[scrollToBottomSmooth, scrollToBottomAuto, isAtBottom],
 	)
 
-	useEffect(() => {
-		let timer: ReturnType<typeof setTimeout> | undefined
-		if (!disableAutoScrollRef.current) {
-			timer = setTimeout(() => scrollToBottomSmooth(), 50)
-		}
-		return () => {
-			if (timer) {
-				clearTimeout(timer)
-			}
-		}
-	}, [groupedMessages.length, scrollToBottomSmooth])
-
+	// Disable sticky follow when user scrolls up inside the chat container
 	const handleWheel = useCallback((event: Event) => {
 		const wheelEvent = event as WheelEvent
-
-		if (wheelEvent.deltaY && wheelEvent.deltaY < 0) {
-			if (scrollContainerRef.current?.contains(wheelEvent.target as Node)) {
-				// User scrolled up
-				disableAutoScrollRef.current = true
-			}
+		if (wheelEvent.deltaY < 0 && scrollContainerRef.current?.contains(wheelEvent.target as Node)) {
+			stickyFollowRef.current = false
 		}
 	}, [])
-
-	useEvent("wheel", handleWheel, window, { passive: true }) // passive improves scrolling performance
+	useEvent("wheel", handleWheel, window, { passive: true })
 
 	// Effect to clear checkpoint warning when messages appear or task changes
 	useEffect(() => {
@@ -1867,12 +1852,15 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 							increaseViewportBy={{ top: 3_000, bottom: 1000 }}
 							data={groupedMessages}
 							itemContent={itemContent}
+							followOutput="smooth"
 							atBottomStateChange={(isAtBottom: boolean) => {
 								setIsAtBottom(isAtBottom)
-								if (isAtBottom) {
-									disableAutoScrollRef.current = false
+								if (!isAtBottom && stickyFollowRef.current) {
+									// While in sticky mode, force-pin as streaming increases height
+									scrollToBottomAuto()
+									return
 								}
-								setShowScrollToBottom(disableAutoScrollRef.current && !isAtBottom)
+								setShowScrollToBottom(!isAtBottom)
 							}}
 							atBottomThreshold={10}
 							initialTopMostItemIndex={groupedMessages.length - 1}
@@ -1893,8 +1881,10 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 										appearance="secondary"
 										className="flex-[2]"
 										onClick={() => {
-											scrollToBottomSmooth()
-											disableAutoScrollRef.current = false
+											// Engage sticky follow until user scrolls up
+											stickyFollowRef.current = true
+											// Pin immediately to avoid lag during fast streaming
+											scrollToBottomAuto()
 										}}>
 										<span className="codicon codicon-chevron-down"></span>
 									</VSCodeButton>
