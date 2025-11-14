@@ -267,6 +267,12 @@ export async function presentAssistantMessage(cline: Task) {
 				break
 			}
 
+			// Check if we're using native tool protocol - hoist to avoid redeclaration
+			const toolProtocol = vscode.workspace
+				.getConfiguration(Package.name)
+				.get<ToolProtocol>("toolProtocol", "xml")
+			const isNative = isNativeProtocol(toolProtocol)
+
 			if (cline.didAlreadyUseTool) {
 				// Ignore any content after a tool has already been used.
 				cline.userMessageContent.push({
@@ -295,7 +301,7 @@ export async function presentAssistantMessage(cline: Task) {
 						)
 						return
 					}
-
+	
 					// For native protocol, add as tool_result block
 					let resultContent: string
 					if (typeof content === "string") {
@@ -336,10 +342,14 @@ export async function presentAssistantMessage(cline: Task) {
 					}
 				}
 
-				// Once a tool result has been collected, ignore all other tool
-				// uses since we should only ever present one tool result per
-				// message.
-				cline.didAlreadyUseTool = true
+				// For XML protocol: Only one tool per message is allowed
+				// For native protocol: Multiple tools can be executed in sequence
+				if (!isNative) {
+					// Once a tool result has been collected, ignore all other tool
+					// uses since we should only ever present one tool result per
+					// message (XML protocol only).
+					cline.didAlreadyUseTool = true
+				}
 			}
 
 			const askApproval = async (
