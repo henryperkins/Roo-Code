@@ -73,6 +73,7 @@ export class GenerateImageTool extends BaseTool<"generate_image"> {
 			const inputImageExists = await fileExistsAtPath(inputImageFullPath)
 			if (!inputImageExists) {
 				await task.say("error", `Input image not found: ${getReadablePath(task.cwd, inputImagePath)}`)
+				task.didToolFailInCurrentTurn = true
 				pushToolResult(
 					formatResponse.toolError(`Input image not found: ${getReadablePath(task.cwd, inputImagePath)}`),
 				)
@@ -96,6 +97,7 @@ export class GenerateImageTool extends BaseTool<"generate_image"> {
 						"error",
 						`Unsupported image format: ${imageExtension}. Supported formats: ${supportedFormats.join(", ")}`,
 					)
+					task.didToolFailInCurrentTurn = true
 					pushToolResult(
 						formatResponse.toolError(
 							`Unsupported image format: ${imageExtension}. Supported formats: ${supportedFormats.join(", ")}`,
@@ -111,6 +113,7 @@ export class GenerateImageTool extends BaseTool<"generate_image"> {
 					"error",
 					`Failed to read input image: ${error instanceof Error ? error.message : "Unknown error"}`,
 				)
+				task.didToolFailInCurrentTurn = true
 				pushToolResult(
 					formatResponse.toolError(
 						`Failed to read input image: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -176,6 +179,7 @@ export class GenerateImageTool extends BaseTool<"generate_image"> {
 
 			if (!result.success) {
 				await task.say("error", result.error || "Failed to generate image")
+				task.didToolFailInCurrentTurn = true
 				pushToolResult(formatResponse.toolError(result.error || "Failed to generate image"))
 				return
 			}
@@ -183,6 +187,7 @@ export class GenerateImageTool extends BaseTool<"generate_image"> {
 			if (!result.imageData) {
 				const errorMessage = "No image data received"
 				await task.say("error", errorMessage)
+				task.didToolFailInCurrentTurn = true
 				pushToolResult(formatResponse.toolError(errorMessage))
 				return
 			}
@@ -191,6 +196,7 @@ export class GenerateImageTool extends BaseTool<"generate_image"> {
 			if (!base64Match) {
 				const errorMessage = "Invalid image format received"
 				await task.say("error", errorMessage)
+				task.didToolFailInCurrentTurn = true
 				pushToolResult(formatResponse.toolError(errorMessage))
 				return
 			}

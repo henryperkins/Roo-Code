@@ -267,12 +267,6 @@ export async function presentAssistantMessage(cline: Task) {
 				break
 			}
 
-			// Check if we're using native tool protocol - hoist to avoid redeclaration
-			const toolProtocol = vscode.workspace
-				.getConfiguration(Package.name)
-				.get<ToolProtocol>("toolProtocol", "xml")
-			const isNative = isNativeProtocol(toolProtocol)
-
 			if (cline.didAlreadyUseTool) {
 				// Ignore any content after a tool has already been used.
 				cline.userMessageContent.push({
@@ -301,7 +295,7 @@ export async function presentAssistantMessage(cline: Task) {
 						)
 						return
 					}
-	
+
 					// For native protocol, add as tool_result block
 					let resultContent: string
 					if (typeof content === "string") {
@@ -344,7 +338,7 @@ export async function presentAssistantMessage(cline: Task) {
 
 				// For XML protocol: Only one tool per message is allowed
 				// For native protocol: Multiple tools can be executed in sequence
-				if (!isNative) {
+				if (toolProtocol === TOOL_PROTOCOL.XML) {
 					// Once a tool result has been collected, ignore all other tool
 					// uses since we should only ever present one tool result per
 					// message (XML protocol only).
@@ -412,6 +406,9 @@ export async function presentAssistantMessage(cline: Task) {
 				)
 
 				pushToolResult(formatResponse.toolError(errorString, toolProtocol))
+
+				// Mark that a tool failed in this turn to prevent attempt_completion
+				cline.didToolFailInCurrentTurn = true
 			}
 
 			// If block is partial, remove partial closing tag so its not
@@ -463,6 +460,7 @@ export async function presentAssistantMessage(cline: Task) {
 				)
 			} catch (error) {
 				cline.consecutiveMistakeCount++
+				cline.didToolFailInCurrentTurn = true
 				pushToolResult(formatResponse.toolError(error.message, toolProtocol))
 				break
 			}
@@ -497,6 +495,9 @@ export async function presentAssistantMessage(cline: Task) {
 						// Track tool repetition in telemetry.
 						TelemetryService.instance.captureConsecutiveMistakeError(cline.taskId)
 					}
+
+					// Mark that a tool failed in this turn to prevent attempt_completion
+					cline.didToolFailInCurrentTurn = true
 
 					// Return tool result message about the repetition
 					pushToolResult(
@@ -714,6 +715,17 @@ export async function presentAssistantMessage(cline: Task) {
 					})
 					break
 				case "attempt_completion": {
+					// Prevent attempt_completion if any tool failed in the current assistant message (turn).
+					// This only applies to tools called within the same message, not across different turns.
+					// For example, this blocks: read_file (fails) + attempt_completion in same message
+					// But allows: read_file (fails) → user message → attempt_completion in next turn
+					if (cline.didToolFailInCurrentTurn) {
+						const errorMsg = `Cannot execute attempt_completion because a previous tool call failed in this turn. Please address the tool failure before attempting completion.`
+						await cline.say("error", errorMsg)
+						pushToolResult(formatResponse.toolError(errorMsg))
+						break
+					}
+
 					const completionCallbacks: AttemptCompletionCallbacks = {
 						askApproval,
 						handleError,
