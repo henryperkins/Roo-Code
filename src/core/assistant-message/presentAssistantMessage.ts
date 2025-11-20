@@ -715,17 +715,6 @@ export async function presentAssistantMessage(cline: Task) {
 					})
 					break
 				case "attempt_completion": {
-					// Prevent attempt_completion if any tool failed in the current assistant message (turn).
-					// This only applies to tools called within the same message, not across different turns.
-					// For example, this blocks: read_file (fails) + attempt_completion in same message
-					// But allows: read_file (fails) → user message → attempt_completion in next turn
-					if (cline.didToolFailInCurrentTurn) {
-						const errorMsg = `Cannot execute attempt_completion because a previous tool call failed in this turn. Please address the tool failure before attempting completion.`
-						await cline.say("error", errorMsg)
-						pushToolResult(formatResponse.toolError(errorMsg))
-						break
-					}
-
 					const completionCallbacks: AttemptCompletionCallbacks = {
 						askApproval,
 						handleError,
