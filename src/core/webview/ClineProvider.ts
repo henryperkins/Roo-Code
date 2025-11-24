@@ -2941,10 +2941,8 @@ export class ClineProvider
 	}
 
 	/**
-	 * Phase 3: Provider orchestration API - delegate parent and open child.
-	 * Spec: docs/architecture/task-orchestration-metadata-driven-subtasks-spec.md §4.1
+	 * Delegate parent task and open child task.
 	 *
-	 * Atomic intent (adapted for current code constraints):
 	 * - Enforce single-open invariant
 	 * - Persist parent delegation metadata
 	 * - Emit TaskDelegated (task-level; API forwards to provider/bridge)
@@ -3030,8 +3028,7 @@ export class ClineProvider
 	}
 
 	/**
-	 * Phase 4: Reopen parent from delegation with write-back and events (experiment-gated by caller).
-	 * Spec: docs/architecture/task-orchestration-metadata-driven-subtasks-spec.md §4.2
+	 * Reopen parent task from delegation with write-back and events.
 	 */
 	public async reopenParentFromDelegation(params: {
 		parentTaskId: string
